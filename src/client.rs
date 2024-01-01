@@ -1,11 +1,12 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
 
-
 use crate::{
     connection::{Connection, SocketAddr},
-    connection_apis::http::HttpConnectionApi, get_capabilities,
-    id::ConnIdFactory, SocketCapability, TLSVersion,
+    connection_apis::{http::HttpConnectionApi, tcp::TcpConnectionApi},
+    get_capabilities,
+    id::ConnIdFactory,
+    SocketCapability, TLSVersion,
 };
 
 #[wasm_bindgen]
@@ -104,6 +105,38 @@ impl Client {
             .find(|c| Into::<u64>::into(c.get_id()) == id)
             .map(|c| HttpConnectionApi::new(c.clone()))
             .unwrap()
+    }
+
+    /// Create a new http connection to the given address.
+    /// # Arguments
+    /// * `addr` - Address to connect to
+    #[wasm_bindgen]
+    pub fn create_tcp_connection(&mut self, addr: String) -> Option<TcpConnectionApi> {
+        let protocol = SocketCapability::TCP;
+        let id = self.factory.generate(protocol);
+        let addr = SocketAddr::split_addr(protocol, addr).unwrap();
+        let connection = Connection::new(self, protocol, addr, id).unwrap();
+        self.connections.push(connection.clone());
+        Some(TcpConnectionApi::new(connection))
+    }
+
+    /// Create a new http connection to the given address with an onready callback.
+    /// # Arguments
+    /// * `addr` - Address to connect to
+    /// * `callback` - Callback to call when the connection is ready
+    #[wasm_bindgen]
+    pub fn create_tcp_connection_with_onready(
+        &mut self,
+        addr: String,
+        callback: js_sys::Function,
+    ) -> Option<TcpConnectionApi> {
+        let protocol = SocketCapability::TCP;
+        let id = self.factory.generate(protocol);
+        let addr = SocketAddr::split_addr(protocol, addr).unwrap();
+        let connection = Connection::new(self, protocol, addr, id).unwrap();
+        connection.set_onready(callback, None);
+        self.connections.push(connection.clone());
+        Some(TcpConnectionApi::new(connection))
     }
 
     /// Generate a new connection ID.
