@@ -1,19 +1,16 @@
 use std::{
-    borrow::Borrow,
     error,
-    fmt::{self, Error},
-    rc::Rc,
-    str::Split,
+    fmt::{self},
 };
 
 use wasm_bindgen::prelude::*;
 
-use wasm_bindgen_futures::js_sys::{self, Array, ArrayBuffer, Math::log};
+use wasm_bindgen_futures::js_sys::{self};
 use web_sys::{
-    js_sys::Uint8Array, AddEventListenerOptions, Blob, BlobPropertyBag, MessageEvent, WebSocket,
+    AddEventListenerOptions, WebSocket,
 };
 
-use crate::{client::Client, console_log, http, id::ConnId, SocketCapability};
+use crate::{client::Client, id::ConnId, SocketCapability};
 
 #[derive(Clone, Debug)]
 pub struct Connection {
@@ -31,7 +28,7 @@ pub struct SocketAddr;
 
 impl SocketAddr {
     pub fn split_addr(protocol: SocketCapability, addr: String) -> Option<String> {
-        let mut addr = addr;
+        let addr = addr;
         if !addr.contains("://") {
             return Some(addr);
         }

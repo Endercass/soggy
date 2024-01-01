@@ -1,13 +1,11 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys;
-use web_sys::WebSocket;
+
 
 use crate::{
     connection::{Connection, SocketAddr},
-    connection_apis::http::HttpConnectionApi,
-    console_log, get_capabilities,
-    id::ConnIdFactory,
-    log, SocketCapability, TLSVersion,
+    connection_apis::http::HttpConnectionApi, get_capabilities,
+    id::ConnIdFactory, SocketCapability, TLSVersion,
 };
 
 #[wasm_bindgen]
