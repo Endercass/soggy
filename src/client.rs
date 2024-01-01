@@ -107,7 +107,7 @@ impl Client {
             .unwrap()
     }
 
-    /// Create a new http connection to the given address.
+    /// Create a new tcp connection to the given address.
     /// # Arguments
     /// * `addr` - Address to connect to
     #[wasm_bindgen]
@@ -120,7 +120,7 @@ impl Client {
         Some(TcpConnectionApi::new(connection))
     }
 
-    /// Create a new http connection to the given address with an onready callback.
+    /// Create a new tcp connection to the given address with an onready callback.
     /// # Arguments
     /// * `addr` - Address to connect to
     /// * `callback` - Callback to call when the connection is ready
@@ -137,6 +137,16 @@ impl Client {
         connection.set_onready(callback, None);
         self.connections.push(connection.clone());
         Some(TcpConnectionApi::new(connection))
+    }
+
+    /// Get a tcp connection API for the given connection.
+    #[wasm_bindgen]
+    pub fn get_tcp_connection_api(&self, id: u64) -> TcpConnectionApi {
+        self.connections
+            .iter()
+            .find(|c| Into::<u64>::into(c.get_id()) == id)
+            .map(|c| TcpConnectionApi::new(c.clone()))
+            .unwrap()
     }
 
     /// Generate a new connection ID.

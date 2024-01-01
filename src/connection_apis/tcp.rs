@@ -2,9 +2,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys::{self, ArrayBuffer, Uint8Array};
 use web_sys::{AddEventListenerOptions, MessageEvent};
 
-use crate::{
-    connection::{Connection, ConnectionError},
-};
+use crate::connection::{Connection, ConnectionError};
 
 #[wasm_bindgen]
 pub struct TcpConnectionRequest {
