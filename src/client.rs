@@ -3,7 +3,8 @@ use wasm_bindgen_futures::js_sys;
 use web_sys::WebSocket;
 
 use crate::{
-    connection::{Connection, HttpConnectionApi, SocketAddr},
+    connection::{Connection, SocketAddr},
+    connection_apis::http::HttpConnectionApi,
     console_log, get_capabilities,
     id::ConnIdFactory,
     log, SocketCapability, TLSVersion,

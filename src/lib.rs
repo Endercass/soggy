@@ -1,5 +1,6 @@
 mod client;
 mod connection;
+mod connection_apis;
 mod id;
 mod macros;
 

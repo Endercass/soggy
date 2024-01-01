@@ -9,7 +9,7 @@ macro_rules! http {
     ($method:expr, $path:expr, $headers:expr, $body:expr) => {{
         let mut request = format!("{} {} HTTP/1.1\r\n", $method, $path);
 
-        let headers: Vec<crate::connection::HttpHeader> = $headers;
+        let headers: Vec<crate::connection_apis::http::HttpHeader> = $headers;
 
         let body: Vec<u8> = $body;
 
@@ -25,7 +25,7 @@ macro_rules! http {
     ($method:expr, $path:expr, $headers:expr) => {{
         let mut request = format!("{} {} HTTP/1.1\r\n", $method, $path);
 
-        let headers: Vec<crate::connection::HttpHeader> = $headers;
+        let headers: Vec<crate::connection_apis::http::HttpHeader> = $headers;
 
         for header in headers {
             request.push_str(&format!("{}: {}\r\n", header.name, header.value));
