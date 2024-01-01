@@ -4,8 +4,6 @@ use web_sys::{AddEventListenerOptions, MessageEvent};
 
 use crate::{
     connection::{Connection, ConnectionError},
-    connection_apis::http::HttpHeader,
-    console_log, http,
 };
 
 #[wasm_bindgen]
