@@ -1,0 +1,28 @@
+[package]
+name = "socketguard"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rustls = { git = "https://github.com/Endercass/rustls-wasm", features = [
+    "wasm",
+] }
+rustls-pki-types = { version = "1.1.0", features = ["std"] }
+webpki-roots = "0.26"
+wasm-bindgen = "0.2.89"
+web-sys = { version = "0.3.66", features = [
+    "Blob",
+    "BlobPropertyBag",
+    "WebSocket",
+    "BinaryType",
+    "MessageEvent",
+    "EventTarget",
+    "AddEventListenerOptions",
+] }
+wasm-timer = "0.2.5"
+wasm-bindgen-futures = "0.4.39"

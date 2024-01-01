@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>socketguard test</title>
+  </head>
+  <body style="margin: 0">
+    <script type="module">
+      import init, {
+        Client,
+        HttpConnectionRequest,
+        HttpHeader,
+      } from "./dist/socketguard.js";
+
+      async function run() {
+        await init();
+
+        window.client = new Client("ws://localhost:8001");
+        window.conn = client.create_http_connection_with_onready(
+          "http://neverssl.com/",
+          () => {
+            window.resp = conn.send(
+              new HttpConnectionRequest(
+                "GET",
+                "/online/",
+                [
+                  HttpHeader.of("Host", "neverssl.com"),
+                  HttpHeader.of("User-Agent", "SocketGuard/0.1.0"),
+                  HttpHeader.of("Accept", "*/*"),
+                ],
+                null
+              ),
+              (resp) => {
+                console.log("status", resp.get_code());
+                console.log(
+                  "headers",
+                  resp
+                    .get_headers()
+                    .map((h) => h.get_name() + ": " + h.get_value())
+                );
+                console.log("body", new TextDecoder().decode(resp.get_body()));
+              }
+            );
+          }
+        );
+      }
+      run();
+    </script>
+  </body>
+</html>
