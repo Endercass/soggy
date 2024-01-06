@@ -1,3 +1,0 @@
-[submodule "test/wsProxy"]
-	path = test/wsProxy
-	url = https://github.com/MercuryWorkshop/wsProxy

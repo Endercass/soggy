@@ -9,6 +9,7 @@
       import init, {
         Client,
         HttpConnectionRequest,
+        HttpsConnectionRequest,
         TcpConnectionRequest,
         HttpHeader,
       } from "./dist/socketguard.js";
@@ -16,7 +17,7 @@
       async function run() {
         await init();
 
-        window.client = new Client("ws://localhost:8001");
+        window.client = new Client("ws://localhost:3000");
         window.conn = window.client.create_http_connection_with_onready(
           "http://neverssl.com/",
           () => {
@@ -52,6 +53,33 @@
                 new Uint8Array([104, 101, 108, 108, 111, 10])
               ),
               (resp) => {
+                console.log("body", new TextDecoder().decode(resp.get_body()));
+              }
+            );
+          }
+        );
+        window.conn3 = window.client.create_https_connection_with_onready(
+          "https://example.com/",
+          () => {
+            window.resp = window.conn3.send(
+              new HttpsConnectionRequest(
+                "GET",
+                "/online/",
+                [
+                  HttpHeader.of("Host", "example.com"),
+                  HttpHeader.of("User-Agent", "SocketGuard/0.1.0"),
+                  HttpHeader.of("Accept", "*/*"),
+                ],
+                null
+              ),
+              (resp) => {
+                console.log("status", resp.get_code());
+                console.log(
+                  "headers",
+                  resp
+                    .get_headers()
+                    .map((h) => h.get_name() + ": " + h.get_value())
+                );
                 console.log("body", new TextDecoder().decode(resp.get_body()));
               }
             );

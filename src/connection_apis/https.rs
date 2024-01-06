@@ -1,55 +1,28 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    io::{Read, Write},
+    sync::{Arc, Mutex},
+};
 
+use rustls::{
+    client::ClientConnectionData,
+    server,
+    version::{TLS12, TLS13},
+    ClientConfig, ClientConnection, RootCertStore,
+};
+use rustls_pki_types::{DnsName, IpAddr, ServerName};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::js_sys::{self, ArrayBuffer, Uint8Array};
 use web_sys::{AddEventListenerOptions, MessageEvent};
 
 use crate::{
     connection::{Connection, ConnectionError},
-    console_log, http,
+    console_log, http, SocketCapability, TLSVersion,
 };
 
-#[derive(Clone, Debug)]
-#[wasm_bindgen]
-pub struct HttpHeader {
-    /// Header name
-    pub(crate) name: String,
-    /// Header value
-    pub(crate) value: String,
-}
+use super::http::HttpHeader;
 
 #[wasm_bindgen]
-impl HttpHeader {
-    /// Create a new HTTP header.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - Header name
-    /// * `value` - Header value
-    #[wasm_bindgen]
-    pub fn of(name: String, value: String) -> Self {
-        Self { name, value }
-    }
-
-    /// Get the header name.
-    /// # Returns
-    /// The header name.
-    #[wasm_bindgen]
-    pub fn get_name(&self) -> String {
-        self.name.clone()
-    }
-
-    /// Get the header value.
-    /// # Returns
-    /// The header value.
-    #[wasm_bindgen]
-    pub fn get_value(&self) -> String {
-        self.value.clone()
-    }
-}
-
-#[wasm_bindgen]
-pub struct HttpConnectionRequest {
+pub struct HttpsConnectionRequest {
     /// Request method
     method: String,
     /// Request path
@@ -61,7 +34,7 @@ pub struct HttpConnectionRequest {
 }
 
 #[wasm_bindgen]
-impl HttpConnectionRequest {
+impl HttpsConnectionRequest {
     /// Create a new HTTP request.
     ///
     /// # Arguments
@@ -86,7 +59,7 @@ impl HttpConnectionRequest {
 }
 
 #[wasm_bindgen]
-pub struct HttpConnectionResponse {
+pub struct HttpsConnectionResponse {
     /// Response code
     code: u16,
     /// Response headers
@@ -96,7 +69,7 @@ pub struct HttpConnectionResponse {
 }
 
 #[wasm_bindgen]
-impl HttpConnectionResponse {
+impl HttpsConnectionResponse {
     /// Create a new HTTP response.
     ///
     /// # Arguments
@@ -133,24 +106,68 @@ impl HttpConnectionResponse {
 }
 
 #[wasm_bindgen]
-pub struct HttpConnectionApi {
+pub struct HttpsConnectionApi {
     /// Connection to create API for
     connection: Connection,
+    /// TLS client config
+    config: Arc<ClientConfig>,
+    /// TLS server name
+    server_name: ServerName<'static>,
 }
 
-impl HttpConnectionApi {
+impl HttpsConnectionApi {
     /// Create a new API instance for the given connection.
     ///
     /// # Arguments
     ///
     /// * `connection` - Connection to create API for
     pub fn new(connection: Connection) -> Self {
-        Self { connection }
+        let root_store = RootCertStore {
+            roots: webpki_roots::TLS_SERVER_ROOTS.into(),
+        };
+
+        let protocol_version = match connection.protocol {
+            SocketCapability::HTTPS(TLSVersion::TLSv1_2) => &TLS12,
+            SocketCapability::HTTPS(TLSVersion::TLSv1_3) => &TLS13,
+            _ => panic!("Invalid protocol version"),
+        };
+
+        let config = Arc::new(
+            ClientConfig::builder_with_protocol_versions(&[protocol_version])
+                .with_root_certificates(root_store)
+                .with_no_client_auth(),
+        );
+
+        // Determine if the server name is an IP address or a domain name
+
+        let addr: String = connection
+            .addr
+            .clone()
+            .split(':')
+            .next()
+            .unwrap_throw()
+            .to_string();
+
+        console_log!("Connecting to {}", addr);
+
+        let ip_regex = regex::Regex::new(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^([0-9A-Fa-f]{0,4}:){2,7}([0-9A-Fa-f]{1,4}$|((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.|$)){4})$").unwrap_throw();
+
+        let server_name: ServerName = if ip_regex.is_match(&addr) {
+            ServerName::IpAddress(IpAddr::try_from(addr.as_str()).unwrap_throw())
+        } else {
+            ServerName::DnsName(DnsName::try_from(addr).unwrap_throw())
+        };
+
+        Self {
+            connection,
+            config,
+            server_name,
+        }
     }
 }
 
 #[wasm_bindgen]
-impl HttpConnectionApi {
+impl HttpsConnectionApi {
     #[wasm_bindgen]
     /// Get the address of this connection.
     pub fn get_addr(&self) -> String {
@@ -171,7 +188,7 @@ impl HttpConnectionApi {
     #[wasm_bindgen]
     pub fn send(
         &self,
-        data: HttpConnectionRequest,
+        data: HttpsConnectionRequest,
         callback: js_sys::Function,
     ) -> Result<(), ConnectionError> {
         if (self.connection.socket.ready_state() as u16) != 1 {
@@ -184,7 +201,20 @@ impl HttpConnectionApi {
         } else {
             http!(data.method, data.path, data.headers)
         };
-        console_log!("Sending request: {:?}", req);
+
+        let mut conn = rustls::ClientConnection::new(self.config.clone(), self.server_name.clone())
+            .unwrap_throw();
+
+        conn.writer().write_all(&req).unwrap_throw();
+
+        let mut tls = Vec::new();
+        conn.write_tls(&mut tls).unwrap_throw();
+
+        let _ = conn.process_new_packets().unwrap_throw();
+
+        let cb_conn = Arc::new(Mutex::new(conn));
+
+        let encoded_response: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
 
         let response_code: Arc<Mutex<u16>> = Arc::new(Mutex::new(0u16));
 
@@ -197,75 +227,45 @@ impl HttpConnectionApi {
         let message_callback: Closure<dyn Fn(MessageEvent)> =
             Closure::wrap(Box::new(move |evt: MessageEvent| {
                 let buffer = evt.data().dyn_into::<ArrayBuffer>().unwrap_throw();
-                let bytes = Uint8Array::new(&buffer).to_vec();
+                let tls = Uint8Array::new(&buffer).to_vec();
 
-                console_log!("Waiting for mutex lock...");
+                let mut encoded_response = encoded_response.lock().unwrap_throw();
 
-                let mut response_code = response_code.lock().unwrap_throw();
-                let mut response_headers = response_headers.lock().unwrap_throw();
-                let mut response_body = response_body.lock().unwrap_throw();
-                let mut content_length = content_length.lock().unwrap_throw();
+                let mut cb_conn = cb_conn.lock().unwrap_throw();
 
-                console_log!("Mutex lock acquired");
+                console_log!("Received TLS: {:?}", tls);
 
-                if response_code.eq(&0u16) {
-                    let str = String::from_utf8(Uint8Array::new(&buffer).to_vec()).unwrap_throw();
+                (*encoded_response).extend_from_slice(&tls);
 
-                    console_log!("Received initial response");
+                console_log!("cumulative TLS: {:?}", *encoded_response);
+                console_log!("TLS len: {}", encoded_response.len());
 
-                    let mut lines = str.split("\r\n");
-
-                    *response_code = lines
-                        .nth(0)
-                        .unwrap_throw()
-                        .split(' ')
-                        .nth(1)
-                        .unwrap_throw()
-                        .parse()
+                if encoded_response.len() == 4011 {
+                    console_log!("TESTING: example tls complete");
+                    cb_conn
+                        .read_tls(&mut encoded_response.as_slice())
                         .unwrap_throw();
+                    let mut vec: Vec<u8> = Vec::new();
 
-                    lines
-                        .clone()
-                        .take_while(|line| !line.is_empty())
-                        .for_each(|line| {
-                            let mut split = line.split(": ");
-                            let name = split.next().unwrap_throw().to_string();
-                            let value = split.next().unwrap_throw().to_string();
-                            if name == "Content-Length" {
-                                *content_length = value.parse().unwrap_throw();
-                            }
-                            (*response_headers).push(HttpHeader::of(name, value));
-                        });
+                    // cb_conn.reader().read_to_end(&mut vec).unwrap_throw();
 
-                    lines
-                        .skip_while(|line| !line.is_empty())
-                        .skip(1)
-                        .for_each(|line| {
-                            (*response_body).extend_from_slice(line.as_bytes());
-                        });
-                } else {
-                    console_log!("Received another chunk");
-                    response_body.extend_from_slice(&bytes);
+                    console_log!("Received response: {:?}", cb_conn.);
                 }
 
-                if response_body.len() >= *content_length {
-                    let response = HttpConnectionResponse::new(
-                        *response_code,
-                        (*response_headers).clone(),
-                        Some((*response_body).clone()),
-                    );
-                    console_log!("Last chunk received");
-                    let this = JsValue::null();
+                drop(encoded_response);
+                drop(cb_conn)
 
-                    callback
-                        .call1(&this, &JsValue::from(response))
-                        .unwrap_throw();
-                }
+                // cb_conn.read_tls(&mut tls.as_slice()).unwrap_throw();
+                // let _ = cb_conn.process_new_packets().unwrap_throw();
 
-                drop(response_code);
-                drop(response_headers);
-                drop(response_body);
-                drop(content_length);
+                // let mut vec: Vec<u8> = Vec::new();
+
+                // cb_conn.reader().read_to_end(&mut vec).unwrap_throw();
+
+                // console_log!(
+                //     "Received response: {}",
+                //     String::from_utf8(vec.clone()).unwrap_throw()
+                // );
             }));
 
         let _ = self
@@ -283,7 +283,7 @@ impl HttpConnectionApi {
         let _ = self
             .connection
             .socket
-            .send_with_u8_array(&req)
+            .send_with_u8_array(&tls)
             .unwrap_throw();
 
         Ok(())

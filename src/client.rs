@@ -3,7 +3,7 @@ use wasm_bindgen_futures::js_sys;
 
 use crate::{
     connection::{Connection, SocketAddr},
-    connection_apis::{http::HttpConnectionApi, tcp::TcpConnectionApi},
+    connection_apis::{http::HttpConnectionApi, https::HttpsConnectionApi, tcp::TcpConnectionApi},
     get_capabilities,
     id::ConnIdFactory,
     SocketCapability, TLSVersion,
@@ -107,6 +107,48 @@ impl Client {
             .unwrap()
     }
 
+    /// Create a new http connection to the given address.
+    /// # Arguments
+    /// * `addr` - Address to connect to
+    #[wasm_bindgen]
+    pub fn create_https_connection(&mut self, addr: String) -> Option<HttpsConnectionApi> {
+        let protocol = SocketCapability::HTTPS(self.get_highest_tls_version());
+        let id = self.factory.generate(protocol);
+        let addr = SocketAddr::split_addr(protocol, addr).unwrap();
+        let connection = Connection::new(self, protocol, addr, id).unwrap();
+        self.connections.push(connection.clone());
+        Some(HttpsConnectionApi::new(connection))
+    }
+
+    /// Create a new http connection to the given address with an onready callback.
+    /// # Arguments
+    /// * `addr` - Address to connect to
+    /// * `callback` - Callback to call when the connection is ready
+    #[wasm_bindgen]
+    pub fn create_https_connection_with_onready(
+        &mut self,
+        addr: String,
+        callback: js_sys::Function,
+    ) -> Option<HttpsConnectionApi> {
+        let protocol = SocketCapability::HTTPS(self.get_highest_tls_version());
+        let id = self.factory.generate(protocol);
+        let addr = SocketAddr::split_addr(protocol, addr).unwrap();
+        let connection = Connection::new(self, protocol, addr, id).unwrap();
+        connection.set_onready(callback, None);
+        self.connections.push(connection.clone());
+        Some(HttpsConnectionApi::new(connection))
+    }
+
+    /// Get a http connection API for the given connection.
+    #[wasm_bindgen]
+    pub fn get_https_connection_api(&self, id: u64) -> HttpsConnectionApi {
+        self.connections
+            .iter()
+            .find(|c| Into::<u64>::into(c.get_id()) == id)
+            .map(|c| HttpsConnectionApi::new(c.clone()))
+            .unwrap()
+    }
+
     /// Create a new tcp connection to the given address.
     /// # Arguments
     /// * `addr` - Address to connect to
@@ -160,8 +202,9 @@ impl Client {
 
 impl Client {
     /// Get the highest supported TLS version.
-    pub fn get_highest_tls_version() -> TLSVersion {
-        *get_capabilities()
+    pub fn get_highest_tls_version(&self) -> TLSVersion {
+        *self
+            .capabilities
             .iter()
             .filter_map(|c| match c {
                 SocketCapability::HTTPS(v) => Some(v),

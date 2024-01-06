@@ -2,12 +2,15 @@
   "compilerOptions": {
     "target": "es2016",
     "lib": [],
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "NodeNext",
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noImplicitAny": false,
     "skipLibCheck": true
+  },
+  "ts-node": {
+    "esm": true
   }
 }
